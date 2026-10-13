@@ -1,0 +1,952 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Image Rehab</title>
+<style>
+  @font-face { font-family: "RC"; src: url("/assets/RobotoCondensed.ttf") format("truetype"); font-weight: 100 900; font-display: swap; }
+  @font-face { font-family: "RCX"; src: url("/assets/RobotoCondensed-ExtraBold.ttf") format("truetype"); font-weight: 800; font-display: swap; }
+  /* two themes: every colour of the page is one of these; the picture always lies on a dark stage */
+  :root {
+    --panel: #efe6d0; --card: #f9f3e3; --well: #e0d4b7; --lift: #ffffff; --ink: #24231f; --on-ink: #f9f3e3; --soft: #655f52;
+    --edge: #24231f; --faint: rgba(36,35,31,.3); --hair: rgba(36,35,31,.18); --dots: rgba(36,35,31,.07); --shadow: #24231f;
+    --red: #d2402c; --red-hover: #a92d1c; --good: #25804d; --bad: #a92d1c; --stage: #1b1a17;
+    --float: #efe6d0; --float-ink: #24231f;
+    --cut: polygon(9px 0, 100% 0, calc(100% - 9px) 100%, 0 100%);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --panel: #201f1b; --card: #292823; --well: #3a3831; --lift: #45423a; --ink: #ece3cd; --on-ink: #1c1b18; --soft: #a39c89;
+    --edge: #5f5a4d; --faint: rgba(236,227,205,.2); --hair: rgba(236,227,205,.13); --dots: rgba(236,227,205,.035); --shadow: #0b0b09;
+    --red: #dc4530; --red-hover: #f0604a; --good: #5fd08c; --bad: #ff8a78; --stage: #121110;
+    --float: #3a3831; --float-ink: #ece3cd;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--stage); color: var(--ink); font: 15px/1.4 "RC", "Segoe UI", system-ui, sans-serif; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+  [hidden] { display: none !important; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:disabled { cursor: default; }
+
+  /* ---------- the top strip ---------- */
+  header { display: flex; align-items: center; gap: 12px; padding: 8px 16px 8px 14px; background: var(--panel); border-bottom: 3px solid var(--edge); }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .brand h1 { margin: 0; font: 800 27px/1 "RCX", "RC", sans-serif; letter-spacing: .01em; text-transform: uppercase; white-space: nowrap; }
+  .brand h1 b { display: inline-block; background: var(--red); color: #fff; padding: 3px 14px 4px; margin-left: 4px; clip-path: var(--cut); font-weight: 800; }
+  .brand p { margin: 0; color: var(--soft); font-size: 14px; line-height: 1.25; max-width: 330px; }
+  header .gap { flex: 1; }
+  .promo { display: flex; align-items: center; gap: 9px; color: var(--soft); font-size: 12px; line-height: 1.15; text-align: right; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; margin-left: 4px; }
+  .logo { width: 87px; height: 46px; background: var(--ink); -webkit-mask: url("/assets/logo.svg") center / contain no-repeat; mask: url("/assets/logo.svg") center / contain no-repeat; }
+
+  /* ---------- buttons ---------- */
+  .btn { border: 0; background: var(--ink); color: var(--on-ink); padding: 8px 18px; font: 800 14px/1.2 "RCX", "RC", sans-serif; letter-spacing: .04em; text-transform: uppercase; clip-path: var(--cut); transition: background .12s, transform .06s; white-space: nowrap; }
+  .btn:hover:not(:disabled) { background: var(--red); color: #fff; }
+  .btn:active:not(:disabled) { transform: translateY(1px); }
+  .btn:disabled { opacity: .35; }
+  .btn.red { background: var(--red); color: #fff; }
+  .btn.red:hover:not(:disabled) { background: var(--red-hover); }
+  .btn.pale { background: var(--well); color: var(--ink); }
+  .btn.pale:hover:not(:disabled) { background: var(--ink); color: var(--on-ink); }
+  .btn.big { font-size: 16px; padding: 11px 22px; }
+  .btn.wide { width: 100%; }
+  .btn.icon { padding: 7px 14px; display: grid; place-items: center; }
+  .btn.icon svg { width: 19px; height: 19px; display: block; }
+  .seg { display: flex; }
+  .seg button { position: relative; flex: 1; border: 2px solid var(--edge); background: var(--card); padding: 6px 8px; margin-left: -2px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; white-space: nowrap; }
+  .seg button:first-child { margin-left: 0; }
+  .seg button:hover:not(:disabled):not(.on) { background: var(--well); }
+  .seg button.on { background: var(--ink); color: var(--on-ink); border-color: var(--ink); z-index: 1; }
+  .seg button:disabled { opacity: .4; }
+  .seg svg { width: 18px; height: 18px; flex: none; }
+
+  /* ---------- the steps on the left ---------- */
+  main { display: grid; grid-template-columns: 384px minmax(0, 1fr); min-height: 0; }
+  aside { overflow-y: auto; padding: 14px 14px 20px; background: var(--panel); border-right: 3px solid var(--edge); display: flex; flex-direction: column; gap: 14px;
+          background-image: radial-gradient(var(--dots) 1px, transparent 1.2px); background-size: 9px 9px; }
+  .card { position: relative; background: var(--card); border: 2px solid var(--edge); box-shadow: 4px 4px 0 var(--shadow); padding: 12px 14px 14px; }
+  .card.next { box-shadow: 4px 4px 0 var(--red); border-color: var(--red); }
+  .card.off > *:not(h2) { opacity: .38; pointer-events: none; }
+  .card h2 { margin: 0 0 8px; font: 800 19px/1 "RCX", "RC", sans-serif; text-transform: uppercase; letter-spacing: .02em; display: flex; align-items: center; gap: 10px; }
+  .card h2 i { font-style: normal; background: var(--red); color: #fff; min-width: 34px; text-align: center; padding: 4px 10px 5px; clip-path: var(--cut); }
+  .card p { margin: 0 0 9px; color: var(--soft); }
+  .card p:last-child { margin-bottom: 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 9px 0 0; }
+  .label { font: 800 12px/1 "RCX", "RC", sans-serif; text-transform: uppercase; letter-spacing: .08em; color: var(--soft); margin: 12px 0 5px; }
+  .name { font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+
+  .numbers { width: 100%; border-collapse: collapse; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .numbers td { padding: 3px 0; border-top: 1px solid var(--hair); }
+  .numbers td:nth-child(n+2) { text-align: right; width: 62px; font-weight: 700; }
+  .numbers td.was { color: var(--soft); font-weight: 400; }
+  .numbers td.better { color: var(--good); }
+  .numbers th { text-align: right; font: 800 11px/1 "RCX", "RC", sans-serif; text-transform: uppercase; letter-spacing: .08em; color: var(--soft); padding-bottom: 3px; }
+  .verdict { display: inline-block; padding: 2px 11px 3px; clip-path: var(--cut); color: var(--ink); background: var(--well); font: 800 12px/1.3 "RCX", "RC", sans-serif; text-transform: uppercase; letter-spacing: .06em; }
+  .verdict.good { background: #25804d; color: #fff; }
+
+  .modes { display: grid; gap: 6px; }
+  .modes button { display: grid; grid-template-columns: 78px 1fr; gap: 10px; align-items: center; text-align: left; padding: 7px 10px 7px 8px; background: var(--panel); border: 2px solid var(--faint); }
+  .modes button:hover:not(.on) { border-color: var(--edge); }
+  .modes button.on { background: var(--lift); border-color: var(--ink); box-shadow: inset 5px 0 0 var(--red); }
+  .modes b { display: block; font: 800 15px/1.15 "RCX", "RC", sans-serif; text-transform: uppercase; letter-spacing: .02em; }
+  .modes span { display: block; color: var(--soft); font-size: 13.5px; line-height: 1.25; }
+  .shot { display: block; width: 78px; height: 52px; background-size: auto 100%; background-position: 0 0; background-repeat: no-repeat; outline: 1px solid var(--edge); }
+  .demo-pic { position: relative; aspect-ratio: 3 / 2; background-size: 306.667% 100%; background-repeat: no-repeat; outline: 1px solid var(--edge); cursor: pointer; }
+  .demo-tag { position: absolute; left: 0; top: 8px; background: var(--red); color: #fff; padding: 2px 16px 3px 10px; font: 800 13px/1.3 "RCX", "RC", sans-serif; text-transform: uppercase; letter-spacing: .06em; clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+  .demo-dots { display: flex; margin: 5px 0 9px; }
+  .demo-dots button { flex: 1; border: 0; border-bottom: 3px solid var(--faint); background: none; padding: 3px 2px 4px; font: 800 11px/1.3 "RCX", "RC", sans-serif; text-transform: uppercase; letter-spacing: .07em; color: var(--soft); }
+  .demo-dots button.on { color: var(--ink); border-bottom-color: var(--red); }
+  .frames { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 0 0 8px; }
+  .frames.two { grid-template-columns: repeat(2, 1fr); }
+  .frames figure { margin: 0; }
+  .frames i { display: block; aspect-ratio: 3 / 2; background-size: 306.667% 100%; background-repeat: no-repeat; outline: 1px solid var(--edge); }
+  .frames.two i { background-size: 203.333% 100%; }
+  .frames figure:nth-child(2) i { background-position: 50% 0; }
+  .frames figure:nth-child(3) i, .frames.two figure:nth-child(2) i { background-position: 100% 0; }
+  .frames figcaption { font: 800 11px/1.5 "RCX", "RC", sans-serif; text-transform: uppercase; letter-spacing: .07em; color: var(--soft); text-align: center; }
+  .how { margin: 8px 0 0; padding: 9px 10px; background: var(--panel); border-left: 4px solid var(--edge); color: var(--ink); font-size: 14px; }
+  .card .how p { color: var(--ink); margin: 0; }
+  .size { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 150px; }
+  .size input { flex: 1; min-width: 0; accent-color: var(--ink); }
+  .size output { min-width: 44px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .swatch { width: 26px; height: 26px; border: 2px solid var(--edge); flex: none; background: repeating-linear-gradient(45deg, var(--well) 0 4px, var(--card) 4px 8px); }
+  .saved { margin-top: 8px; font-size: 13.5px; color: var(--good); overflow-wrap: anywhere; }
+  .setup { margin-top: 10px; padding: 8px 10px; border: 1.5px dashed var(--edge); font-size: 13px; line-height: 1.35; color: var(--soft); }
+  .setup code { display: block; margin: 5px 0; white-space: pre; color: var(--ink); font: 700 12.5px/1.5 Consolas, "Cascadia Mono", monospace; user-select: all; }
+  details summary { cursor: pointer; font-weight: 700; margin-top: 10px; }
+  kbd { display: inline-block; background: var(--card); border: 1.5px solid var(--edge); border-bottom-width: 3px; padding: 0 6px; font: 700 12px/1.5 "RC", sans-serif; }
+
+  /* ---------- the picture ---------- */
+  .stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: var(--stage); display: grid; grid-template-rows: minmax(0, 1fr) auto;
+           background-image: radial-gradient(rgba(239,230,208,.06) 1px, transparent 1.3px); background-size: 14px 14px; }
+  .view { position: relative; min-height: 0; }
+  canvas#view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .bar { position: absolute; display: flex; gap: 6px; align-items: center; top: 12px; }
+  .bar.right { right: 12px; }
+  .bar.left { left: 12px; right: 330px; flex-wrap: wrap; }
+  .bar .btn { padding: 7px 14px; background: var(--float); color: var(--float-ink); font-size: 13px; }
+  .bar .btn:hover:not(:disabled) { background: var(--red); color: #fff; }
+  .bar .btn.held { background: var(--red); color: #fff; }
+  .chip { background: rgba(239,230,208,.14); color: #efe6d0; border: 0; padding: 4px 12px 5px; clip-path: var(--cut); font-size: 13px; white-space: nowrap; }
+  .chip:hover { background: rgba(239,230,208,.3); }
+  .chip.on { background: #efe6d0; color: #24231f; font-weight: 700; }
+  footer { display: flex; gap: 14px; align-items: center; padding: 6px 14px; background: var(--panel); border-top: 3px solid var(--edge); min-height: 36px; }
+  #note { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  #note.bad { color: var(--bad); } #note.good { color: var(--good); }
+  #note .swatch { width: 18px; height: 18px; }
+  #where { color: var(--soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .spin { width: 14px; height: 14px; border: 3px solid var(--ink); border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; flex: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+  .empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; }
+  .drop { max-width: 470px; text-align: center; background: var(--panel); border: 3px dashed var(--edge); padding: 26px 30px 28px; box-shadow: 6px 6px 0 rgba(0,0,0,.5); }
+  .drop h3 { margin: 6px 0 6px; font: 800 26px/1.05 "RCX", "RC", sans-serif; text-transform: uppercase; }
+  .drop p { margin: 0 0 16px; color: var(--soft); }
+  .drop .row { justify-content: center; }
+  .over { position: fixed; inset: 0; z-index: 30; background: rgba(210,64,44,.88); color: #fff; display: grid; place-items: center; font: 800 44px/1 "RCX", "RC", sans-serif; text-transform: uppercase; pointer-events: none; }
+
+  /* ---------- sheets over the page ---------- */
+  dialog { border: 3px solid var(--edge); background: var(--card); color: var(--ink); padding: 0; box-shadow: 8px 8px 0 rgba(0,0,0,.55); max-width: min(880px, calc(100vw - 32px)); width: 100%; max-height: calc(100vh - 40px); }
+  dialog::backdrop { background: rgba(12,11,9,.74); }
+  .sheet-top { position: sticky; top: 0; display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--panel); border-bottom: 3px solid var(--edge); z-index: 2; }
+  .sheet-top h2 { margin: 0; flex: 1; font: 800 22px/1 "RCX", "RC", sans-serif; text-transform: uppercase; }
+  .sheet { padding: 14px 20px 22px; }
+  .sheet h3 { margin: 18px 0 6px; font: 800 17px/1.1 "RCX", "RC", sans-serif; text-transform: uppercase; display: flex; align-items: center; gap: 9px; }
+  .sheet h3:first-child { margin-top: 2px; }
+  .sheet h3 i { font-style: normal; background: var(--red); color: #fff; padding: 2px 10px 3px; clip-path: var(--cut); }
+  .sheet p, .sheet li { margin: 0 0 7px; }
+  .sheet ol, .sheet ul { margin: 0 0 8px; padding-left: 22px; }
+  .pics { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin: 10px 0 4px; }
+  .pics .frames { margin: 0 0 2px; }
+  .pics figure { margin: 0; background: var(--panel); border: 2px solid var(--edge); padding: 8px 10px 9px; }
+  .pics svg { width: 100%; height: auto; display: block; }
+  .pics figcaption { font-size: 13.5px; color: var(--soft); margin-top: 6px; line-height: 1.25; }
+  .pics figcaption b { color: var(--ink); }
+  .keys { display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; align-items: baseline; }
+  .crumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 12px; }
+  .crumbs button { border: 0; background: var(--well); padding: 3px 12px 4px; clip-path: var(--cut); font-weight: 700; }
+  .crumbs button:hover { background: var(--ink); color: var(--on-ink); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 10px; }
+  .tile { border: 2px solid var(--edge); background: var(--panel); padding: 6px; text-align: center; overflow: hidden; }
+  .tile:hover { background: var(--lift); box-shadow: 3px 3px 0 var(--red); }
+  .tile img { width: 100%; height: 104px; object-fit: contain; display: block; background: var(--well); }
+  .tile .dir { height: 104px; display: grid; place-items: center; background: var(--well); }
+  .tile .dir svg { width: 46px; height: 46px; }
+  .tile span { display: block; margin-top: 5px; font-size: 12.5px; line-height: 1.2; overflow-wrap: anywhere; max-height: 3.6em; overflow: hidden; }
+
+  @media (max-width: 1100px) { .brand p { display: none; } .bar.left { right: 12px; top: 52px; } }
+  @media (max-width: 860px) {
+    main { grid-template-columns: 1fr; grid-template-rows: minmax(0, 46%) minmax(0, 1fr); }
+    aside { border-right: 0; border-bottom: 3px solid var(--edge); }
+    .promo span { display: none; }
+  }
+</style>
+<script>
+  // the theme is set before the page is drawn, so it never flashes the other one
+  try { document.documentElement.dataset.theme = localStorage.getItem("ripple-theme") === "light" ? "light" : "dark"; } catch (problem) { document.documentElement.dataset.theme = "dark"; }
+</script>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>AI Image<b>Rehab</b></h1>
+    <p>Takes the traces of an image generator off a drawing. The drawing itself stays: lines, shadows and small details are kept.</p>
+  </div>
+  <div class="gap"></div>
+  <button class="btn pale" id="help-open">How it works</button>
+  <button class="btn pale icon" id="theme"></button>
+  <div class="promo" title="City Paradise"><span>made<br>for the game</span><div class="logo" role="img" aria-label="City Paradise"></div></div>
+</header>
+
+<main>
+  <aside>
+    <section class="card next" id="card-open">
+      <h2><i>1</i>Picture</h2>
+      <p id="open-hint">Any drawing: PNG, JPG or WebP. You can drop a file onto the page or paste from the clipboard (<kbd>Ctrl</kbd>+<kbd>V</kbd>).</p>
+      <p id="opened" hidden><span class="name" id="name"></span><br><span id="size"></span></p>
+      <div class="row">
+        <button class="btn" id="pick">Open file</button>
+        <button class="btn pale" id="browse">From folder</button>
+      </div>
+      <input id="file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+    </section>
+
+    <section class="card off" id="card-clean">
+      <h2><i>2</i>Auto clean</h2>
+      <p>One button for the whole picture. Takes off the light and dark strips beside lines, small blotches and grain in the fills.</p>
+      <div class="label">How it is drawn</div>
+      <div class="seg" id="look">
+        <button data-look="flat" class="on" title="Fills of one colour with crisp shadows">Flat colour</button>
+        <button data-look="painted" title="Shadows and blush with soft transitions: cleaned more gently so they are not flattened">Soft shading</button>
+      </div>
+      <div class="row"><button class="btn red big wide" id="clean">Remove ripple</button></div>
+      <table class="numbers" id="numbers" hidden>
+        <tr><th></th><th>before</th><th>after</th></tr>
+        <tr><td>strip beside lines</td><td class="was" id="n0e">…</td><td id="n1e">–</td></tr>
+        <tr><td>blotches in fills</td><td class="was" id="n0b">…</td><td id="n1b">–</td></tr>
+        <tr><td>grain</td><td class="was" id="n0g">…</td><td id="n1g">–</td></tr>
+      </table>
+      <div class="row" id="verdict-row" hidden><span class="verdict" id="verdict"></span><span style="color:var(--soft);font-size:13.5px">in brightness levels of 255, lower is better</span></div>
+    </section>
+
+    <section class="card off" id="card-mend">
+      <h2><i>3</i>Fix by hand</h2>
+      <p>What the generator drew wrongly, you point at. Only what is under the selection changes; any step is undone with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</p>
+      <div class="label">What to do</div>
+      <div class="modes" id="modes">
+        <button data-mode="ai" class="on">
+          <span class="shot" style="background-image:url(/assets/ex-ai.png)"></span>
+          <div><b>Remove a mark</b><span>a stroke, a speck, a smear, a blot: what should not be there</span></div>
+        </button>
+        <button data-mode="shapes">
+          <span class="shot" style="background-image:url(/assets/ex-shapes.png)"></span>
+          <div><b>Rim along lines</b><span>a coloured or pale strip beside lashes, locks, outlines</span></div>
+        </button>
+        <button data-mode="lines">
+          <span class="shot" style="background-image:url(/assets/ex-lines.png)"></span>
+          <div><b>Stray shadow, gap</b><span>a shadow that cannot be there; a slit between a line and its shadow</span></div>
+        </button>
+        <button data-mode="draw">
+          <span class="shot" style="background-image:url(/assets/ex-draw.png)"></span>
+          <div><b>Draw a line</b><span>an outline is missing or drawn in the wrong colour</span></div>
+        </button>
+      </div>
+      <div class="how">
+        <div class="demo-pic" id="demo-pic" title="Click to turn over"><span class="demo-tag" id="demo-tag">before</span></div>
+        <div class="demo-dots" id="demo-dots"><button data-k="0" class="on">before</button><button data-k="1">select</button><button data-k="2">after</button></div>
+        <p id="how"></p>
+        <div class="row" id="filler-row">
+          <div class="seg" id="filler" style="flex:1">
+            <button data-filler="ai" class="on" title="A fast network redraws the selected spot from what is around it: 1–3 seconds">Fast</button>
+            <button data-filler="tidy" title="The same, and then a big anime model from this computer draws the spot clean: 20–60 seconds, uses the video card" hidden>Refined</button>
+            <button data-filler="guided" title="A big anime model draws the spot from scratch out of its surroundings: for spots harder than a stroke, 1–2 minutes, uses the video card" hidden>From scratch</button>
+            <button data-filler="flow" title="No network: the selection is painted over with one neighbouring fill">Plain fill</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="setup" id="setup-mend" hidden>The network is switched off: “Remove a mark” paints with a plain fill for now. To switch it on, run in the program's folder:<code></code>and reload this page.</div>
+
+      <div class="label">Select with</div>
+      <div class="seg" id="tools">
+        <button data-tool="brush" class="on" title="Drag over the picture with the left button held"><svg viewBox="0 0 20 20"><path d="M3 17c3 0 4-1 4-3l8-10 2 2-10 8c-2 0-3 1-4 3Z" fill="currentColor"/></svg>Brush</button>
+        <button data-tool="lasso" title="Draw around the spot without letting the button go"><svg viewBox="0 0 20 20"><path d="M10 3c4 0 7 2 7 5s-3 5-7 5-7-2-7-5 3-5 7-5Zm-4 9c0 2 1 3 0 5" fill="none" stroke="currentColor" stroke-width="2"/></svg>Lasso</button>
+        <button data-tool="wand" title="Click a thin mark: it selects itself"><svg viewBox="0 0 20 20"><path d="M3 17 12 8" stroke="currentColor" stroke-width="2.6"/><path d="M14 1v4M12 3h4M17 8v3M15.5 9.5h3M8 2v3M6.5 3.5h3" stroke="currentColor" stroke-width="1.6"/></svg>Wand</button>
+      </div>
+      <div class="row">
+        <label class="size" id="size-row"><span id="size-name">Size</span><input id="brush" type="range" min="2" max="90" value="18"><output id="brush-out">18 px</output></label>
+        <div class="seg" id="sign" style="flex:none">
+          <button data-sign="add" class="on" title="Add to the selection">＋</button>
+          <button data-sign="sub" title="Take away from the selection (or hold Alt)">−</button>
+        </div>
+      </div>
+
+      <div class="label" id="colour-label">Colour to paint with</div>
+      <div class="row" style="margin-top:0" id="colour-row">
+        <div class="seg" id="colour" style="flex:1">
+          <button data-colour="auto" class="on" id="auto" title="The program takes the fill that borders the selection most">Auto</button>
+          <button data-colour="pick" title="Click a fill on the picture: that very fill is used">Eyedropper</button>
+        </div>
+        <span class="swatch" id="swatch" title="The colour under the eyedropper"></span>
+      </div>
+
+      <div class="row" style="margin-top:14px">
+        <button class="btn red big" id="apply" style="flex:1">Paint over</button>
+        <button class="btn pale" id="clear" title="Esc">Clear</button>
+        <button class="btn pale" id="again" title="Undo the last step and draw the same spot another way" hidden>Another take</button>
+      </div>
+    </section>
+
+    <section class="card off" id="card-result">
+      <h2><i>4</i>Done</h2>
+      <p>What is downloaded is what you see now: the last step. The source file is never changed.</p>
+      <div class="row">
+        <button class="btn red" id="download">Download PNG</button>
+        <button class="btn pale" id="save">Save to folder</button>
+      </div>
+      <div class="saved" id="saved" hidden></div>
+      <details id="bigger" hidden>
+        <summary>Double the size with a network</summary>
+        <p style="margin-top:6px">Twice the size, with sharp lines. A flat-colour picture keeps its own colours and small details (freckles, blush); a soft-shaded one gets its small details redrawn. The choice is the one made in step 2. About a minute, uses the video card.</p>
+        <button class="btn pale" id="enlarge">Enlarge</button>
+      </details>
+      <div class="setup" id="setup-done" hidden>There is also “Double the size with a network”, switched off for now. To switch it on, run in the program's folder:<code></code>and reload this page.</div>
+    </section>
+  </aside>
+
+  <div class="stage" id="stage">
+    <div class="view" id="viewbox">
+      <canvas id="view"></canvas>
+      <div class="bar left" id="chips"></div>
+      <div class="bar right" id="viewbar" hidden>
+        <button class="btn" id="before" title="Hold the button or the B key">Before</button>
+        <button class="btn" id="undo" title="Ctrl+Z">↶</button>
+        <button class="btn" id="redo" title="Ctrl+Y">↷</button>
+        <button class="btn" id="minus" title="Smaller">−</button>
+        <button class="btn" id="one" title="Pixel for pixel">1:1</button>
+        <button class="btn" id="plus" title="Larger">+</button>
+        <button class="btn" id="fit" title="Fit to the window">⤢</button>
+      </div>
+      <div class="empty" id="empty">
+        <div class="drop">
+          <svg viewBox="0 0 64 44" width="96" height="66"><path d="M4 6h56v32H4Z" fill="none" stroke="currentColor" stroke-width="3"/><path d="M4 32 20 18l10 9 12-13 18 20" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="17" cy="13" r="3.5" fill="#d2402c"/></svg>
+          <h3>Drop a picture here</h3>
+          <p>or open it with a button. Then one button takes the ripple off the whole picture, and single spots can be fixed by hand.</p>
+          <div class="row"><button class="btn red big" id="pick2">Open file</button><button class="btn pale big" id="browse2">From folder</button></div>
+        </div>
+      </div>
+    </div>
+    <footer><div id="note">Open a picture to begin.</div><div id="where"></div></footer>
+  </div>
+</main>
+<div class="over" id="over" hidden>Drop to open</div>
+
+<dialog id="folder">
+  <div class="sheet-top"><h2>Pictures from the folder</h2><button class="btn pale" data-close>Close</button></div>
+  <div class="sheet"><div class="crumbs" id="crumbs"></div><div class="tiles" id="tiles"></div></div>
+</dialog>
+
+<dialog id="help">
+  <div class="sheet-top"><h2>How it works</h2><button class="btn pale" data-close>Close</button></div>
+  <div class="sheet">
+    <h3><i>?</i>What the ripple is</h3>
+    <p>A picture from an image generator carries a trace of two kinds. The eye reads both as "dirty" and "this is AI", most of all from afar.</p>
+    <div class="pics">
+      <figure>
+        <div class="frames two" style="--x:0"><figure><i style="background-image:url(/assets/ex-auto.png)"></i><figcaption>before</figcaption></figure><figure><i style="background-image:url(/assets/ex-auto.png)"></i><figcaption>after</figcaption></figure></div>
+        <figcaption><b>The trace in the pixels</b> (8 times enlarged). A light strip along the line, blotches and grain in the fill. Removed automatically, step 2.</figcaption>
+      </figure>
+      <figure>
+        <div class="frames"><figure><i style="background-image:url(/assets/ex-shapes.png)"></i><figcaption>before</figcaption></figure><figure><i style="background-image:url(/assets/ex-shapes.png)"></i><figcaption>select like this</figcaption></figure><figure><i style="background-image:url(/assets/ex-shapes.png)"></i><figcaption>after</figcaption></figure></div>
+        <figcaption><b>Drawn mistakes.</b> A rim along the lashes, a stray stroke, a slit beside a shadow, a missing outline. No rule can tell a stray stroke from one that was meant, so you point at it, step 3.</figcaption>
+      </figure>
+    </div>
+
+    <h3><i>→</i>The order of work</h3>
+    <ol>
+      <li><b>Open a picture.</b> By file, by dropping it, or from the clipboard. The source file is never changed.</li>
+      <li><b>Press “Remove ripple”.</b> If the picture has soft, painted shading, choose “Soft shading” first. It takes from a few seconds to half a minute.</li>
+      <li><b>Look.</b> The mouse wheel zooms. The “Before” button (or the key <kbd>B</kbd>), while held, shows the picture as it came. Check both large and small: a drawn mistake is seen better from afar.</li>
+      <li><b>Fix spots by hand</b>, if any are left. Choose what to do, select the spot, press the button under the selection. Not happy: <kbd>Ctrl</kbd>+<kbd>Z</kbd>, the selection comes back.</li>
+      <li><b>Download.</b> “Download PNG” hands the file to the browser, “Save to folder” puts it into a folder beside the program and shows the path.</li>
+    </ol>
+
+    <h3><i>2</i>How the auto clean works</h3>
+    <ul>
+      <li>It splits the picture into calm fills and edges.</li>
+      <li>In a fill it compares every pixel with the mean colour of its own fill nearby. A deviation under 5 brightness levels of 255 counts as dirt and is evened out. Over 10 counts as drawing (a shadow, blush, a highlight, a freckle) and is left alone.</li>
+      <li>At a line it looks for a strip: lighter than the fill beside a dark line, or darker beside a light shape. It pulls the strip to the colour of the fill, by no more than 14 % of the line's contrast.</li>
+      <li>No shape moves: lines, shadows, highlights and small details stay where they are.</li>
+    </ul>
+    <p>The three numbers “before → after” show how much of this trace the picture has: how far the strip beside lines is from the fill (the worst tenth of the edges is taken), how uneven the fills are near lines, and how much fine grain there is. All in brightness levels of 255. Compare “before” and “after” of one picture; different pictures cannot be compared by these numbers, a painted one reads higher because of its own shading.</p>
+
+    <h3><i>3</i>How fixing by hand works</h3>
+    <p>You select a spot and choose one of four ways. Only what is under the selection changes; the rest of the picture stays pixel for pixel.</p>
+    <ul>
+      <li><b>Remove a mark.</b> A network (LaMa, trained on anime and manga) cuts the selection out and draws the spot anew from what is around it: it carries on the lines and fills that reach the selection. It is strong on small things: a stroke, a speck, a smear, a blot. Select the mark itself, whole, with its ends, and nothing else: everything under the selection is drawn its own way, lashes and outlines too. It runs on the processor, one to three seconds. The “Plain fill” switch does the same without a network: it paints the selection over with one fill.</li>
+      <li>This way can be carried out in up to four manners. <b>“Fast”</b>: this network alone, and its plain fills are replaced by the exact colours of the picture itself, so there is neither a colour shift nor grain. <b>“Refined”</b>: after it a big anime model from this computer (Illustrious) draws the spot clean; lines come out crisper where there is a lot of small detail. <b>“From scratch”</b>: the big model draws the spot anew with a guide trained to fill holes. <b>“Plain fill”</b>: no networks, one neighbouring fill. The big model takes 20 seconds or more and uses the video card; the “Another take” button draws the same spot differently.</li>
+      <li><b>Rim along lines.</b> No network, and exact. Dark lines and all neighbouring shapes with their soft edges stay under the selection; the rest is painted over with the neighbouring fill. Select generously, right over the lashes.</li>
+      <li><b>Stray shadow, gap.</b> Only dark lines stay; everything else in the selection becomes one fill: the one that borders the selection most, or the one you clicked with the eyedropper. The colour flows in from the edges of that fill, so its shading carries on.</li>
+      <li><b>Draw a line.</b> It removes nothing: it draws. Where you brushed, a line appears in the colour of the nearest outline. A click with the eyedropper on a neighbouring line takes its colour and sets the brush to its width. The eyedropper can take any fill as well: then the brush simply paints with it.</li>
+    </ul>
+    <p>Why there are several ways: a thin tip of a lash and a stray stroke are built alike, and neither a rule nor a network knows which of them was meant. With a wide selection the network redraws the lashes too; the exact ways will not touch them, but will not erase a stray stroke growing out of a lash either.</p>
+    <p>All measures are tuned for pictures about 1300 pixels across and grow with the picture. The wand finds a thin mark under the click by itself; a thin tip of a lash is a mark for it too, so look at what got selected and take the extra away with the brush set to “−”.</p>
+    <p><b>So that nothing gets spoiled:</b> every step can be undone, and the selection comes back with it; the “Before” button shows the picture as it came; the work is written to disk after every step and taken up again when the page is started; the source file is never changed.</p>
+
+    <h3><i>⌨</i>Controls</h3>
+    <div class="keys">
+      <span>Wheel</span><span>zoom in and out</span>
+      <span><kbd>Space</kbd> + drag, right button</span><span>move the picture</span>
+      <span><kbd>B</kbd> (hold)</span><span>show how it was</span>
+      <span><kbd>Enter</kbd></span><span>paint over the selection</span>
+      <span><kbd>Esc</kbd></span><span>clear the selection</span>
+      <span><kbd>Alt</kbd> + brush</span><span>take away from the selection</span>
+      <span><kbd>[</kbd> <kbd>]</kbd></span><span>brush size</span>
+      <span><kbd>Ctrl</kbd>+<kbd>Z</kbd>, <kbd>Ctrl</kbd>+<kbd>Y</kbd></span><span>step back and forward</span>
+    </div>
+
+    <h3><i>!</i>What the program cannot do</h3>
+    <p>It invents nothing new: it will not add a lash or mend a finger or a shape. It removes what is extra and draws a line where you drew it. The network draws what is likely, not what is true: look at every result. The picture is sent nowhere: everything is computed on this computer.</p>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+// the names of the steps: the program keeps a short key for each, the page words it
+const STEPS = { start: "as it came", clean: "auto clean", enlarge: "doubled",
+                ai: "mark removed", tidy: "removed, refined", guided: "redrawn",
+                shapes: "rim", lines: "fill", nothing: "erased", draw: "line drawn", edit: "edit" };
+const stepName = step => STEPS[step.label] || step.label;
+const $ = id => document.getElementById(id);
+const canvas = $("view"), ctx = canvas.getContext("2d");
+const HOW = {
+  ai: "Brush over the mark itself, whole, with its ends, and nothing else. The network draws the spot anew from what is around it. Do not sweep widely over lashes and outlines: it will redraw them too.",
+  flow: "Brush over the mark itself and nothing else: it is painted over with one neighbouring fill. If the colour is wrong, take the eyedropper.",
+  tidy: "Like “Fast”, and then a big anime model draws the spot clean: lines come out crisper where there is a lot of small detail. Wait 20–60 seconds; the video card is busy. Not happy: “Another take”.",
+  guided: "A big anime model draws the selection from scratch out of what is around it. For spots harder than a stroke. Wait 1–2 minutes; the video card is busy. Not happy: “Another take”.",
+  shapes: "Brush over the spot generously, right over lashes and lines: they stay exactly as they are. The colour is chosen for you.",
+  lines: "Brush over everything that should become an even fill. Dark lines stay. For a gap beside a shadow take the eyedropper and click the shadow.",
+  draw: "Brush where the line should run: it appears in the colour of the neighbouring outline. Click a neighbouring line with the eyedropper and the brush takes its colour and width."
+};
+const SIZES = { ai: 9, shapes: 18, lines: 18, draw: 6 };
+const S = { steps: [], redo: 0, name: "", shown: null, zoom: 1, ox: 0, oy: 0, mode: "ai", filler: "ai", ai: false, strong: false, guided: false, seed: 0, tool: "brush", sub: false,
+            sense: 10, source: null, picking: false, busy: false, before: false, space: false, pointer: null };
+const images = new Map();           // step id -> Image
+const kept = new Map();             // paint step id -> the selection it was made from
+const sel = document.createElement("canvas"), tint = document.createElement("canvas"), probe = document.createElement("canvas");
+const selCtx = sel.getContext("2d", { willReadFrequently: true });
+probe.width = probe.height = 1;
+let selHas = false, selCount = 0, selPast = [], stroke = null, drag = null, lasso = null, queued = false;
+
+// ------------------------------------------------------------------ talking to the server
+async function call(method, path, body, raw) {
+  const options = { method, headers: {} };
+  if (method === "POST") { options.headers["X-Studio"] = "1"; options.body = raw ? body : JSON.stringify(body || {}); }
+  const answer = await fetch(path, options);
+  if (!answer.ok) { let text = "error"; try { text = (await answer.json()).error || text; } catch (problem) { /* not json */ } throw new Error(text); }
+  return answer;
+}
+const ask = async (method, path, body, raw) => (await call(method, path, body, raw)).json();
+
+function note(text, kind, colour) {
+  const box = $("note"); box.className = kind || ""; box.textContent = "";
+  if (kind === "busy") { const spin = document.createElement("span"); spin.className = "spin"; box.append(spin); }
+  if (colour) { const swatch = document.createElement("span"); swatch.className = "swatch"; swatch.style.background = "rgb(" + colour.join(",") + ")"; box.append(swatch); }
+  box.append(document.createTextNode(text || ""));
+}
+
+async function work(label, action, after) {
+  if (S.busy) return;
+  S.busy = true; lock();
+  const started = Date.now();
+  note(label + "…", "busy");
+  const timer = setInterval(() => note(label + "… " + Math.round((Date.now() - started) / 1000) + " s", "busy"), 500);
+  try {
+    const state = await action();
+    clearInterval(timer);
+    await take(state);
+    S.busy = false; lock();
+    if (after) after(state); else note(label + ": done in " + state.seconds + " s.", "good");
+  } catch (problem) {
+    clearInterval(timer);
+    S.busy = false; lock();
+    note(problem.message, "bad");
+  }
+}
+
+// ------------------------------------------------------------------ the state of the page
+function last() { return S.steps[S.steps.length - 1]; }
+function shownStep() { return S.steps.find(step => step.id === S.shown) || last(); }
+
+function load(id) {
+  return new Promise((resolve, reject) => {
+    if (images.has(id)) return resolve(images.get(id));
+    const image = new Image();
+    image.onload = () => { images.set(id, image); resolve(image); };
+    image.onerror = () => reject(new Error("the picture did not load"));
+    image.src = "/api/image?id=" + id;
+  });
+}
+
+async function take(state) {
+  const before = last();
+  const fresh = !before || state.name !== S.name || !state.steps.length || state.steps[0].id !== S.steps[0].id;
+  S.steps = state.steps; S.redo = state.redo; S.name = state.name;
+  for (const id of [...images.keys()]) if (!S.steps.some(step => step.id === id) && id < (last() ? last().id - 3 : 0)) images.delete(id);
+  $("bigger").hidden = !state.enlarge;
+  const needs = (state.setup || []).join("\n");      // a fresh copy says what its neural tools still need
+  for (const [id, works] of [["setup-mend", state.ai], ["setup-done", state.enlarge]]) { $(id).hidden = works || !needs; $(id).querySelector("code").textContent = needs; }
+  if (S.ai !== state.ai || S.strong !== state.strong || S.guided !== state.guided) {
+    S.ai = state.ai; S.strong = state.strong; S.guided = state.guided; S.line = state.line; setMode(S.mode);
+  }
+  S.line = state.line;
+  const now = last();
+  S.shown = now ? now.id : null;
+  if (now) {
+    await Promise.all([load(now.id), load(S.steps[0].id)]);
+    if (sel.width !== now.width || sel.height !== now.height) {
+      sel.width = tint.width = now.width; sel.height = tint.height = now.height; selHas = false; selPast = []; S.source = null;
+      // a larger picture has thicker lines: the brushes start as wide as its lines are
+      SIZES.shapes = SIZES.lines = state.line * 3; SIZES.ai = Math.round(state.line * 1.5); SIZES.draw = state.line; syncRange();
+    }
+    if (fresh || !before || before.width !== now.width) { if (fresh) { clearSelection(); kept.clear(); setSource(null); } fit(); }
+    $("name").textContent = S.name; $("size").textContent = now.width + " × " + now.height + " px";
+  }
+  $("opened").hidden = !now; $("open-hint").hidden = !!now;
+  $("empty").hidden = !!now; $("viewbar").hidden = !now;
+  chips(); lock(); redraw(); count();
+}
+
+function lock() {
+  const none = !S.steps.length, cleaned = S.steps.some(step => step.kind !== "start");
+  $("card-open").classList.toggle("next", none);
+  $("card-clean").classList.toggle("off", none); $("card-clean").classList.toggle("next", !none && !cleaned);
+  $("card-mend").classList.toggle("off", none);
+  $("card-result").classList.toggle("off", none); $("card-result").classList.toggle("next", cleaned);
+  for (const id of ["pick", "browse", "pick2", "browse2", "clean", "enlarge", "download", "save"]) $(id).disabled = S.busy;
+  $("apply").disabled = S.busy || !selHas;
+  $("clear").disabled = S.busy || (!selHas && !S.source);
+  $("undo").disabled = S.busy || S.steps.length < 2;
+  $("redo").disabled = S.busy || !S.redo;
+}
+
+function chips() {
+  const box = $("chips"); box.textContent = "";
+  const from = Math.max(0, S.steps.length - 6);
+  S.steps.forEach((step, index) => {
+    if (index < from && index !== 0) return;
+    const chip = document.createElement("button");
+    chip.className = "chip" + (step.id === S.shown ? " on" : "");
+    chip.textContent = (index === 0 ? "" : index + ". ") + stepName(step);
+    chip.title = "Show this step";
+    chip.onclick = async () => { await load(step.id); S.shown = step.id; chips(); redraw(); if (step.id !== last().id) note("Showing step “" + stepName(step) + "”. Edits always go to the last step."); };
+    box.append(chip);
+    if (index === 0 && from > 1) { const dots = document.createElement("span"); dots.className = "chip"; dots.textContent = "…"; box.append(dots); }
+  });
+}
+
+let counting = 0;
+async function count() {
+  const mine = ++counting, first = S.steps[0], now = last();
+  $("numbers").hidden = !now; if (!now) { $("verdict-row").hidden = true; return; }
+  const cleaned = S.steps.some(step => step.kind === "clean" || step.kind === "enlarge");
+  const put = (prefix, numbers) => { $(prefix + "e").textContent = numbers ? numbers.echo.toFixed(1) : "…"; $(prefix + "b").textContent = numbers ? numbers.blotches.toFixed(2) : "…"; $(prefix + "g").textContent = numbers ? numbers.grain.toFixed(2) : "…"; };
+  const verdict = (was, got) => { const box = $("verdict"); $("verdict-row").hidden = false;
+    if (got.echo <= was.echo * 0.6) { box.textContent = "cleaner"; box.className = "verdict good"; box.title = ""; }
+    else { box.textContent = got.echo < was.echo * 0.95 ? "slightly cleaner" : "almost no change"; box.className = "verdict";
+           box.title = "The picture was clean already, or it has soft shading: the program leaves it alone, yet it counts in these numbers too."; } };
+  try {
+    const was = await ask("GET", "/api/numbers?id=" + first.id); if (mine !== counting) return;
+    put("n0", was);
+    if (!cleaned) { for (const id of ["n1e", "n1b", "n1g"]) { $(id).textContent = "–"; $(id).className = ""; } $("verdict-row").hidden = true; return; }
+    put("n1", null);
+    const got = await ask("GET", "/api/numbers?id=" + now.id); if (mine !== counting) return;
+    put("n1", got); verdict(was, got);
+    $("n1e").className = got.echo < was.echo ? "better" : ""; $("n1b").className = got.blotches < was.blotches ? "better" : ""; $("n1g").className = got.grain < was.grain ? "better" : "";
+  } catch (problem) { /* the picture changed meanwhile: the numbers come with the next step */ }
+}
+
+// ------------------------------------------------------------------ the selection
+function remember() { const copy = document.createElement("canvas"); copy.width = sel.width; copy.height = sel.height; copy.getContext("2d").drawImage(sel, 0, 0); selPast.push(copy); if (selPast.length > 12) selPast.shift(); }
+function selChanged() {
+  const data = selCtx.getImageData(0, 0, sel.width, sel.height).data;
+  selCount = 0;
+  for (let index = 3; index < data.length; index += 4) if (data[index] > 127) selCount++;
+  selHas = selCount > 0;
+  const paint = tint.getContext("2d");
+  paint.globalCompositeOperation = "copy"; paint.drawImage(sel, 0, 0);
+  paint.globalCompositeOperation = "source-in"; paint.fillStyle = "#ff2bd6"; paint.fillRect(0, 0, tint.width, tint.height);
+  lock(); redraw();
+}
+function clearSelection() { if (sel.width) selCtx.clearRect(0, 0, sel.width, sel.height); selPast = []; lasso = null; stroke = null; selChanged(); }
+function ink(sub) { selCtx.globalCompositeOperation = sub ? "destination-out" : "source-over"; selCtx.fillStyle = selCtx.strokeStyle = "#fff"; selCtx.lineCap = selCtx.lineJoin = "round"; }
+
+function setSource(point, colour) {
+  S.source = point; S.picking = false;
+  const swatch = $("swatch");
+  if (point && colour) swatch.style.background = "rgb(" + colour.join(",") + ")";
+  else if (point) {
+    const image = images.get(last().id), paint = probe.getContext("2d", { willReadFrequently: true });
+    paint.clearRect(0, 0, 1, 1); paint.drawImage(image, -Math.floor(point[0]), -Math.floor(point[1]));
+    const seen = paint.getImageData(0, 0, 1, 1).data;
+    swatch.style.background = "rgb(" + seen[0] + "," + seen[1] + "," + seen[2] + ")";
+  } else swatch.style.background = "";
+  for (const button of $("colour").children) button.classList.toggle("on", (button.dataset.colour === "pick") === !!(point || S.picking));
+  setCursor(); lock(); redraw();
+}
+// the pipette asks what lies under the click: on a line, its dark middle and how wide it is there
+async function pipette(point) {
+  setSource(point);
+  try {
+    const found = await ask("GET", "/api/probe?x=" + point[0].toFixed(1) + "&y=" + point[1].toFixed(1));
+    if (S.source !== point) return;
+    setSource(point, found.colour);
+    if (S.mode === "draw" && found.width) { SIZES.draw = Math.min(90, Math.max(2, found.width)); syncRange(); note("Took the line's colour and width: " + SIZES.draw + " px. Now brush where the line is missing.", "", found.colour); }
+    else if (S.mode === "draw") note("The brush will paint with this colour exactly where you draw.", "", found.colour);
+    else note("It will paint with the fill you clicked." + (selHas ? " Now press “Paint over”." : " Now select the spot."), "", found.colour);
+  } catch (problem) { note(problem.message, "bad"); }
+}
+
+function way() {
+  if (S.mode !== "ai") return S.mode;
+  if (S.filler === "guided" && S.strong && S.guided) return "guided";
+  if (S.filler === "tidy" && S.strong && S.ai) return "tidy";
+  return S.ai && S.filler !== "flow" ? "ai" : "nothing";
+}
+const NEURAL = ["ai", "tidy", "guided"];
+function setMode(mode) {
+  S.mode = mode;
+  const kind = way(), neural = NEURAL.includes(kind);
+  for (const button of $("modes").children) button.classList.toggle("on", button.dataset.mode === mode);
+  for (const button of $("filler").children) {
+    const name = button.dataset.filler;
+    button.classList.toggle("on", name === (kind === "nothing" ? "flow" : kind));
+    button.hidden = (name === "tidy" && !(S.strong && S.ai)) || (name === "guided" && !(S.strong && S.guided)) || (name === "ai" && !S.ai);
+  }
+  $("filler-row").hidden = !(mode === "ai" && S.ai);
+  $("how").textContent = HOW[mode === "ai" ? (kind === "nothing" ? "flow" : kind) : mode];
+  $("again").hidden = true;
+  $("demo-pic").style.backgroundImage = "url(/assets/ex-" + mode + ".png)"; demo(0);
+  $("colour-label").hidden = $("colour-row").hidden = neural;      // the network takes no colour: it draws the place anew
+  if (neural && (S.source || S.picking)) setSource(null);
+  $("auto").textContent = mode === "draw" ? "Like the next line" : "Auto";
+  $("auto").title = mode === "draw" ? "The colour of the dark line nearest to the selection" : "The program takes the fill that borders the selection most";
+  $("apply").textContent = mode === "draw" ? "Draw" : mode === "ai" ? "Remove" : "Paint over";
+  syncRange(); redraw();
+}
+// the live example of the chosen way turns over by itself: was, select so, became
+const TURNS = ["before", "select like this", "after"];
+let turn = 0, turnAfter = 0;
+function demo(k) {
+  turn = k;
+  $("demo-pic").style.backgroundPosition = (k * 50) + "% 0";
+  $("demo-tag").textContent = TURNS[k];
+  for (const button of $("demo-dots").children) button.classList.toggle("on", Number(button.dataset.k) === k);
+}
+function setTool(tool) {
+  S.tool = tool; S.picking = false;
+  for (const button of $("tools").children) button.classList.toggle("on", button.dataset.tool === tool);
+  if (tool === "wand" && S.mode === "shapes") setMode("ai");      // the wand picks the thing itself, and "gentle" would keep it
+  syncRange(); setCursor(); redraw();
+}
+// one slider for two things: the width of the brush (kept per mode) and how weak a mark the wand takes
+function syncRange() {
+  const range = $("brush"), wand = S.tool === "wand";
+  range.min = wand ? 4 : 2; range.max = wand ? 40 : 90;
+  range.value = wand ? 44 - S.sense : SIZES[S.mode];
+  range.disabled = S.tool === "lasso";
+  $("size-name").textContent = wand ? "Sensitivity" : "Size";
+  $("brush-out").textContent = wand ? (S.sense <= 8 ? "high" : S.sense <= 16 ? "medium" : "low") : SIZES[S.mode] + " px";
+}
+function slide(value) {
+  if (S.tool === "wand") S.sense = Math.min(40, Math.max(4, 44 - value)); else SIZES[S.mode] = Math.min(90, Math.max(2, value));
+  syncRange(); redraw();
+}
+function setCursor() { canvas.style.cursor = !S.steps.length ? "default" : S.space || drag ? "grab" : S.picking ? "crosshair" : S.tool === "brush" ? "none" : "crosshair"; }
+
+// ------------------------------------------------------------------ drawing the view
+function fit() {
+  const step = last(); if (!step) return;
+  const box = $("viewbox").getBoundingClientRect();
+  S.zoom = Math.min((box.width - 48) / step.width, (box.height - 110) / step.height, 8);
+  S.ox = (box.width - step.width * S.zoom) / 2; S.oy = (box.height - step.height * S.zoom) / 2 + 18;
+  S.fitted = true; redraw();
+}
+function zoomAt(factor, x, y) {
+  const next = Math.min(40, Math.max(0.04, S.zoom * factor));
+  S.ox = x - (x - S.ox) * next / S.zoom; S.oy = y - (y - S.oy) * next / S.zoom; S.zoom = next; S.fitted = false; redraw();
+}
+function toImage(event) { const box = canvas.getBoundingClientRect(); return [(event.clientX - box.left - S.ox) / S.zoom, (event.clientY - box.top - S.oy) / S.zoom]; }
+function redraw() { if (!queued) { queued = true; requestAnimationFrame(draw); } }
+
+function draw() {
+  queued = false;
+  const box = $("viewbox").getBoundingClientRect(), ratio = window.devicePixelRatio || 1;
+  const wide = Math.max(1, Math.round(box.width * ratio)), tall = Math.max(1, Math.round(box.height * ratio));
+  if (canvas.width !== wide || canvas.height !== tall) { canvas.width = wide; canvas.height = tall; }
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, box.width, box.height);
+  const step = shownStep(); if (!step) { $("where").textContent = ""; return; }
+  const image = images.get(S.before ? S.steps[0].id : step.id); if (!image) return;
+  const first = S.steps[0], scale = S.before ? step.width / first.width : 1;      // an enlarged step is compared at its own size
+  ctx.imageSmoothingEnabled = S.zoom * scale < 2; ctx.imageSmoothingQuality = "high";
+  ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.fillRect(S.ox + 5, S.oy + 5, step.width * S.zoom, step.height * S.zoom);
+  // under a picture with see-through parts lie grey squares, so a black outline is seen on the dark stage
+  if (!draw.squares) { const tile = document.createElement("canvas"); tile.width = tile.height = 24; const paint = tile.getContext("2d"); paint.fillStyle = "#6f6f6f"; paint.fillRect(0, 0, 24, 24); paint.fillStyle = "#858585"; paint.fillRect(0, 0, 12, 12); paint.fillRect(12, 12, 12, 12); draw.squares = ctx.createPattern(tile, "repeat"); }
+  ctx.save(); ctx.translate(S.ox, S.oy); ctx.fillStyle = draw.squares; ctx.fillRect(0, 0, step.width * S.zoom, step.height * S.zoom); ctx.restore();
+  ctx.drawImage(image, S.ox, S.oy, step.width * S.zoom, step.height * S.zoom);
+  if (S.before) return;
+  const at = ([x, y]) => [x * S.zoom + S.ox, y * S.zoom + S.oy];
+  if (step.id === last().id) {
+    ctx.imageSmoothingEnabled = S.zoom < 2;
+    ctx.globalAlpha = 0.5; ctx.drawImage(tint, S.ox, S.oy, step.width * S.zoom, step.height * S.zoom); ctx.globalAlpha = 1;
+    if (lasso && lasso.points.length > 1) {
+      ctx.beginPath(); lasso.points.forEach((point, index) => { const [x, y] = at(point); index ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.lineWidth = 3; ctx.strokeStyle = "#000"; ctx.stroke(); ctx.lineWidth = 1.5; ctx.strokeStyle = lasso.sub ? "#fff" : "#ff2bd6"; ctx.stroke();
+    }
+    if (S.source) {
+      const [x, y] = at(S.source);
+      ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fillStyle = $("swatch").style.background || "#fff"; ctx.fill();
+      ctx.lineWidth = 4; ctx.strokeStyle = "#000"; ctx.stroke(); ctx.lineWidth = 2; ctx.strokeStyle = "#fff"; ctx.stroke();
+    }
+  }
+  if (S.pointer && S.tool === "brush" && !S.picking && !S.space && !drag) {
+    const radius = Math.max(1.5, SIZES[S.mode] * S.zoom / 2);
+    ctx.beginPath(); ctx.arc(S.pointer[0], S.pointer[1], radius, 0, Math.PI * 2);
+    ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,.8)"; ctx.stroke(); ctx.lineWidth = 1.3; ctx.strokeStyle = "#fff"; ctx.stroke();
+  }
+}
+
+// ------------------------------------------------------------------ the pointer on the picture
+function onPicture(point) { const step = last(); return step && point[0] >= 0 && point[1] >= 0 && point[0] < step.width && point[1] < step.height; }
+function ready() {
+  if (S.shown !== last().id) { S.shown = last().id; chips(); redraw(); }
+  return !S.busy;
+}
+
+canvas.addEventListener("wheel", event => { event.preventDefault(); if (!S.steps.length) return; const box = canvas.getBoundingClientRect(); zoomAt(Math.pow(1.0018, -event.deltaY), event.clientX - box.left, event.clientY - box.top); }, { passive: false });
+canvas.addEventListener("contextmenu", event => event.preventDefault());
+canvas.addEventListener("pointerdown", async event => {
+  if (!S.steps.length) return;
+  try { canvas.setPointerCapture(event.pointerId); } catch (problem) { /* a pointer that cannot be held: the stroke still works inside the picture */ }
+  if (event.button === 1 || event.button === 2 || (event.button === 0 && S.space)) { drag = { x: event.clientX, y: event.clientY, ox: S.ox, oy: S.oy }; setCursor(); return; }
+  if (event.button !== 0 || !ready()) return;
+  const point = toImage(event);
+  if (S.picking) { if (onPicture(point)) pipette(point); return; }
+  const sub = S.sub || event.altKey;
+  if (S.tool === "brush") {
+    remember(); ink(sub);
+    const size = SIZES[S.mode];
+    selCtx.beginPath(); selCtx.arc(point[0], point[1], size / 2, 0, Math.PI * 2); selCtx.fill();
+    stroke = { last: point, size, calm: S.mode === "draw", aim: point };
+    selChanged();
+  } else if (S.tool === "lasso") {
+    lasso = { points: [point], sub };
+  } else if (S.tool === "wand" && onPicture(point)) {
+    S.busy = true; lock(); note("Looking for the mark…", "busy");
+    try {
+      const answer = await call("POST", "/api/wand", { points: [point], sense: S.sense });
+      const picked = Number(answer.headers.get("X-Picked")) || 0;
+      if (!picked) note("No thin mark under the click. Raise the sensitivity or brush over the spot.", "bad");
+      else {
+        const found = await createImageBitmap(await answer.blob());
+        remember(); ink(sub); selCtx.drawImage(found, 0, 0);
+        note(sub ? "Taken out of the selection." : "Selected " + picked + " px. Check it did not take too much (the brush set to “−” removes the extra), then press “" + $("apply").textContent + "”.");
+      }
+    } catch (problem) { note(problem.message, "bad"); }
+    S.busy = false; selChanged();
+  }
+});
+canvas.addEventListener("pointermove", event => {
+  const box = canvas.getBoundingClientRect();
+  S.pointer = [event.clientX - box.left, event.clientY - box.top];
+  if (drag) { S.ox = drag.ox + event.clientX - drag.x; S.oy = drag.oy + event.clientY - drag.y; S.fitted = false; redraw(); return; }
+  if (!S.steps.length) return;
+  const point = toImage(event);
+  $("where").textContent = (onPicture(point) ? "x " + Math.floor(point[0]) + "  y " + Math.floor(point[1]) + "   ·   " : "") + Math.round(S.zoom * 100) + " %";
+  if (stroke) {
+    const steps = event.getCoalescedEvents ? event.getCoalescedEvents() : [event];
+    for (const one of steps.length ? steps : [event]) {
+      let next = toImage(one);
+      // a line drawn by hand follows the pointer a little behind it, which takes the tremble out of it
+      if (stroke.calm) { stroke.aim = next; next = [stroke.last[0] + (next[0] - stroke.last[0]) * 0.3, stroke.last[1] + (next[1] - stroke.last[1]) * 0.3]; }
+      selCtx.lineWidth = stroke.size; selCtx.beginPath(); selCtx.moveTo(stroke.last[0], stroke.last[1]); selCtx.lineTo(next[0], next[1]); selCtx.stroke();
+      stroke.last = next;
+    }
+    const paint = tint.getContext("2d");
+    paint.globalCompositeOperation = "copy"; paint.drawImage(sel, 0, 0);
+    paint.globalCompositeOperation = "source-in"; paint.fillStyle = "#ff2bd6"; paint.fillRect(0, 0, tint.width, tint.height);
+  } else if (lasso) lasso.points.push(point);
+  redraw();
+});
+function release() {
+  if (drag) { drag = null; setCursor(); }
+  if (stroke) {
+    if (stroke.calm) { selCtx.lineWidth = stroke.size; selCtx.beginPath(); selCtx.moveTo(stroke.last[0], stroke.last[1]); selCtx.lineTo(stroke.aim[0], stroke.aim[1]); selCtx.stroke(); }
+    stroke = null; selChanged(); if (selHas) note(S.mode === "draw" ? "Line marked. “Draw” or Enter. Not even enough: Ctrl+Z and once more." : "Selected. “" + $("apply").textContent + "” or Enter. You can add more.");
+  }
+  if (lasso) {
+    if (lasso.points.length > 2) {
+      remember(); ink(lasso.sub);
+      selCtx.beginPath(); lasso.points.forEach((point, index) => index ? selCtx.lineTo(point[0], point[1]) : selCtx.moveTo(point[0], point[1])); selCtx.closePath(); selCtx.fill();
+    }
+    lasso = null; selChanged(); if (selHas) note("Selected. “" + $("apply").textContent + "” or Enter. You can add more.");
+  }
+}
+canvas.addEventListener("pointerup", release);
+canvas.addEventListener("pointercancel", release);
+canvas.addEventListener("pointerleave", () => { S.pointer = null; redraw(); });
+new ResizeObserver(() => { if (S.fitted) fit(); else redraw(); }).observe($("viewbox"));      // a picture left as fitted stays fitted
+
+// ------------------------------------------------------------------ actions
+async function apply() {
+  if (S.busy || !S.steps.length) return;
+  if (!selHas) { note("Select a spot on the picture first.", "bad"); return; }
+  const blob = await new Promise(resolve => sel.toBlob(resolve, "image/png"));
+  const held = document.createElement("canvas"); held.width = sel.width; held.height = sel.height; held.getContext("2d").drawImage(sel, 0, 0);
+  const kind = way(), neural = NEURAL.includes(kind), slow = kind === "tidy" || kind === "guided";
+  const query = "keep=" + kind + (S.source && !neural ? "&sx=" + S.source[0].toFixed(1) + "&sy=" + S.source[1].toFixed(1) : "") + (slow ? "&seed=" + S.seed : "");
+  const auto = !S.source, large = selCount > 5000 * (S.line / 6) * (S.line / 6);
+  $("again").hidden = true;
+  const doing = kind === "draw" ? "Drawing" : slow ? "The big model is drawing the spot (the first time takes longer: it is loading)" : neural ? "The network is redrawing the spot" : "Painting over";
+  work(doing, () => ask("POST", "/api/paint?" + query, blob, true), state => {
+    if (!state.changed) { note("Nothing changed: this fill is under the selection already, or everything in it is protected. Try another way or the eyedropper.", "bad"); return; }
+    kept.set(last().id, held); if (kept.size > 8) kept.delete(kept.keys().next().value);
+    clearSelection(); setSource(null);
+    if (kind === "draw") note("Drew " + state.changed + " px in this colour. Not right: Ctrl+Z, the line comes back as a selection.", "good", state.colour);
+    else if (slow) { $("again").hidden = false; note("Spot redrawn (" + state.changed + " px) in " + state.seconds + " s, take " + (S.seed + 1) + ". Not right: “Another take” or Ctrl+Z.", "good"); }
+    else if (kind === "ai") note("Spot redrawn (" + state.changed + " px) in " + state.seconds + " s. " + (large ? "The selection was large: check it did not redraw something you need. " : "") + "Not right: Ctrl+Z, the selection comes back.", "good");
+    else note("Painted over " + state.changed + " px with this colour. " + (auto ? "Wrong colour: Ctrl+Z, then the eyedropper." : "Not right: Ctrl+Z."), "good", state.colour);
+  });
+}
+
+function undo() {
+  if (S.busy) return;
+  if (selPast.length) { const back = selPast.pop(); selCtx.globalCompositeOperation = "copy"; selCtx.drawImage(back, 0, 0); selCtx.globalCompositeOperation = "source-over"; selChanged(); return; }
+  if (S.steps.length < 2) return;
+  const gone = last();
+  work("Step back", () => ask("POST", "/api/undo"), () => {
+    const back = kept.get(gone.id);
+    if (back && back.width === sel.width) { selCtx.globalCompositeOperation = "copy"; selCtx.drawImage(back, 0, 0); selCtx.globalCompositeOperation = "source-over"; selChanged(); note("Step “" + stepName(gone) + "” undone, the selection is back: change the way or the colour and paint again."); }
+    else note("Step “" + stepName(gone) + "” undone.");
+  });
+}
+function redo() { if (!S.busy && S.redo) work("Step forward", () => ask("POST", "/api/redo"), () => { clearSelection(); note("Step restored."); }); }
+
+async function upload(file) {
+  if (!file || S.busy) return;
+  if (!/^image\//.test(file.type || "") && !/\.(png|jpe?g|webp)$/i.test(file.name || "")) { note("This is not a picture: PNG, JPG or WebP is needed.", "bad"); return; }
+  const bytes = await file.arrayBuffer();
+  work("Opening", () => ask("POST", "/api/upload?name=" + encodeURIComponent(file.name || "picture.png"), bytes, true), () => note("Opened. Now step 2: “Remove ripple”."));
+}
+
+async function showFolder(path) {
+  try {
+    const found = await ask("GET", "/api/folder?path=" + encodeURIComponent(path));
+    const crumbs = $("crumbs"), tiles = $("tiles"); crumbs.textContent = ""; tiles.textContent = "";
+    const parts = found.path ? found.path.split("/") : [];
+    [found.top, ...parts].forEach((part, index) => { const button = document.createElement("button"); button.textContent = part; button.onclick = () => showFolder(parts.slice(0, index).join("/")); crumbs.append(button); });
+    const join = name => (found.path ? found.path + "/" : "") + name;
+    for (const name of found.folders) {
+      const tile = document.createElement("button"); tile.className = "tile";
+      tile.innerHTML = '<div class="dir"><svg viewBox="0 0 46 46"><path d="M4 10h14l5 6h19v22H4Z" fill="currentColor"/></svg></div>';
+      const label = document.createElement("span"); label.textContent = name; tile.append(label);
+      tile.onclick = () => showFolder(join(name)); tiles.append(tile);
+    }
+    for (const name of found.files) {
+      const tile = document.createElement("button"); tile.className = "tile";
+      const image = document.createElement("img"); image.loading = "lazy"; image.alt = ""; image.src = "/api/thumb?path=" + encodeURIComponent(join(name));
+      const label = document.createElement("span"); label.textContent = name; tile.append(image, label);
+      tile.onclick = () => { $("folder").close(); work("Opening", () => ask("POST", "/api/open?path=" + encodeURIComponent(join(name))), () => note("Opened. Now step 2: “Remove ripple”.")); };
+      tiles.append(tile);
+    }
+    if (!found.folders.length && !found.files.length) tiles.textContent = "No pictures in this folder.";
+    if (!$("folder").open) $("folder").showModal();
+  } catch (problem) { note(problem.message, "bad"); }
+}
+
+// ------------------------------------------------------------------ buttons and keys
+for (const id of ["pick", "pick2"]) $(id).onclick = () => $("file").click();
+for (const id of ["browse", "browse2"]) $(id).onclick = () => showFolder("");
+$("file").onchange = () => { upload($("file").files[0]); $("file").value = ""; };
+$("help-open").onclick = () => $("help").showModal();
+const SUN = '<svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="4" fill="currentColor"/><path d="M10 1v3M10 16v3M1 10h3M16 10h3M3.6 3.6l2.1 2.1M14.3 14.3l2.1 2.1M3.6 16.4l2.1-2.1M14.3 5.7l2.1-2.1" stroke="currentColor" stroke-width="2"/></svg>';
+const MOON = '<svg viewBox="0 0 20 20"><path d="M15.5 12.5A7 7 0 0 1 7.5 4.500A7 7 0 1 0 15.5 12.5Z" fill="currentColor"/></svg>';
+function theme(next) {
+  if (next) { document.documentElement.dataset.theme = next; try { localStorage.setItem("ripple-theme", next); } catch (problem) { /* the choice lives until the page is closed */ } }
+  const dark = document.documentElement.dataset.theme === "dark";
+  $("theme").innerHTML = dark ? SUN : MOON; $("theme").title = dark ? "Light theme" : "Dark theme";
+}
+$("theme").onclick = () => theme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+theme();
+for (const button of document.querySelectorAll("[data-close]")) button.onclick = () => button.closest("dialog").close();
+for (const sheet of document.querySelectorAll("dialog")) sheet.addEventListener("click", event => { if (event.target === sheet) sheet.close(); });
+$("look").onclick = event => { const button = event.target.closest("button"); if (button) for (const one of $("look").children) one.classList.toggle("on", one === button); };
+$("clean").onclick = () => work("Removing ripple", () => ask("POST", "/api/clean", { painted: $("look").querySelector(".on").dataset.look === "painted" }),
+  state => note("Ripple removed in " + state.seconds + " s. Hold “Before” to compare. Bad spots left: step 3.", "good"));
+$("modes").onclick = event => { const button = event.target.closest("button"); if (button) setMode(button.dataset.mode); };
+$("filler").onclick = event => { const button = event.target.closest("button"); if (button) { S.filler = button.dataset.filler; S.seed = 0; setMode(S.mode); } };
+// the same place drawn another way: the last step is taken back, its selection returns, and the model draws with another seed
+$("again").onclick = () => {
+  if (S.busy || S.steps.length < 2) return;
+  const gone = last();
+  work("Step back", () => ask("POST", "/api/undo"), () => {
+    const back = kept.get(gone.id);
+    if (!back || back.width !== sel.width) { note("The selection of that step was not kept: select the spot again.", "bad"); return; }
+    selCtx.globalCompositeOperation = "copy"; selCtx.drawImage(back, 0, 0); selCtx.globalCompositeOperation = "source-over"; selChanged();
+    S.seed += 1; apply();
+  });
+};
+$("demo-dots").onclick = event => { const button = event.target.closest("button"); if (button) { demo(Number(button.dataset.k)); turnAfter = Date.now() + 9000; } };
+$("demo-pic").onclick = () => { demo((turn + 1) % 3); turnAfter = Date.now() + 9000; };
+setInterval(() => { if (!document.hidden && Date.now() > turnAfter && !matchMedia("(prefers-reduced-motion: reduce)").matches) demo((turn + 1) % 3); }, 1700);
+$("tools").onclick = event => { const button = event.target.closest("button"); if (button) setTool(button.dataset.tool); };
+$("sign").onclick = event => { const button = event.target.closest("button"); if (!button) return; S.sub = button.dataset.sign === "sub"; for (const one of $("sign").children) one.classList.toggle("on", one === button); };
+$("brush").oninput = () => slide(Number($("brush").value));
+$("colour").onclick = event => {
+  const button = event.target.closest("button"); if (!button) return;
+  if (button.dataset.colour === "auto") { setSource(null); note(S.mode === "draw" ? "The colour will be taken from the nearest dark line." : "The colour is chosen for you: the fill that borders the selection most."); }
+  else { S.picking = true; for (const one of $("colour").children) one.classList.toggle("on", one === button); setCursor(); note(S.mode === "draw" ? "Click on the picture the line to draw like (or any fill)." : "Click on the picture the fill to paint with."); }
+};
+$("apply").onclick = apply;
+$("clear").onclick = () => { clearSelection(); setSource(null); note("Selection cleared."); };
+$("undo").onclick = undo; $("redo").onclick = redo;
+$("fit").onclick = fit;
+const middle = () => { const box = $("viewbox").getBoundingClientRect(); return [box.width / 2, box.height / 2]; };
+$("one").onclick = () => zoomAt(1 / S.zoom, ...middle());
+$("plus").onclick = () => zoomAt(1.5, ...middle());
+$("minus").onclick = () => zoomAt(1 / 1.5, ...middle());
+const showBefore = on => { if (S.before !== on) { S.before = on; $("before").classList.toggle("held", on); redraw(); } };
+$("before").addEventListener("pointerdown", () => showBefore(true));
+for (const type of ["pointerup", "pointerleave", "pointercancel"]) $("before").addEventListener(type, () => showBefore(false));
+$("download").onclick = () => { const link = document.createElement("a"); link.href = "/api/image?id=" + last().id + "&download=1"; link.download = S.name + "-clean.png"; document.body.append(link); link.click(); link.remove(); note("File " + S.name + "-clean.png was handed to the browser: look in your downloads. If nothing was downloaded, use “Save to folder”.", "good"); };
+$("save").onclick = async () => { try { const done = await ask("POST", "/api/save"); $("saved").hidden = false; $("saved").textContent = "Saved: " + done.path; note("Saved to the folder.", "good"); } catch (problem) { note(problem.message, "bad"); } };
+$("enlarge").onclick = () => work("Enlarging", () => ask("POST", "/api/enlarge", { painted: $("look").querySelector(".on").dataset.look === "painted" }), state => { clearSelection(); note("Doubled in " + state.seconds + " s.", "good"); });
+
+window.addEventListener("keydown", event => {
+  const tag = event.target.tagName, typing = tag === "INPUT" || tag === "TEXTAREA";
+  if (document.querySelector("dialog[open]")) return;
+  if (event.code === "Space" && !typing) { S.space = true; setCursor(); event.preventDefault(); }
+  if (event.code === "KeyB" && !event.ctrlKey && !typing) showBefore(true);
+  if ((event.ctrlKey || event.metaKey) && event.code === "KeyZ") { event.preventDefault(); event.shiftKey ? redo() : undo(); }
+  if ((event.ctrlKey || event.metaKey) && event.code === "KeyY") { event.preventDefault(); redo(); }
+  if (event.key === "Enter" && tag !== "BUTTON") { event.preventDefault(); apply(); }
+  if (event.key === "Escape") { if (S.picking) { setSource(S.source); note(""); } else { clearSelection(); setSource(null); note("Selection cleared."); } }
+  if ((event.code === "BracketLeft" || event.code === "BracketRight") && S.tool !== "lasso") slide(Number($("brush").value) + (event.code === "BracketLeft" ? -2 : 2));
+});
+window.addEventListener("keyup", event => { if (event.code === "Space") { S.space = false; setCursor(); } if (event.code === "KeyB") showBefore(false); });
+window.addEventListener("blur", () => { S.space = false; showBefore(false); });
+window.addEventListener("paste", event => { const item = [...(event.clipboardData ? event.clipboardData.items : [])].find(one => one.type.startsWith("image/")); if (item) { const file = item.getAsFile(); upload(new File([file], "from-clipboard.png", { type: file.type })); } });
+let overs = 0;
+window.addEventListener("dragenter", event => { if ([...(event.dataTransfer ? event.dataTransfer.types : [])].includes("Files")) { overs++; $("over").hidden = false; } });
+window.addEventListener("dragleave", () => { overs = Math.max(0, overs - 1); if (!overs) $("over").hidden = true; });
+window.addEventListener("dragover", event => event.preventDefault());
+window.addEventListener("drop", event => { event.preventDefault(); overs = 0; $("over").hidden = true; if (event.dataTransfer && event.dataTransfer.files.length) upload(event.dataTransfer.files[0]); });
+
+setMode("ai"); setTool("brush");
+(async () => { try { await take(await ask("GET", "/api/state")); if (S.steps.length) note("Picture is open. " + (S.steps.length > 1 ? "You can fix spots and download." : "Step 2: “Remove ripple”.")); } catch (problem) { note("The program does not answer: " + problem.message, "bad"); } })();
+</script>
+</body>
+</html>

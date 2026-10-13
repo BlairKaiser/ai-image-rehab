@@ -1,0 +1,14 @@
+# model files: get_models.py downloads them
+models/*
+!models/README.md
+
+# what the page saves and the work in hand
+out/
+
+__pycache__/
+*.pyc
+*.part
+
+# left by a game engine when this folder lies inside its project
+.gdignore
+*.import

@@ -1,0 +1,9 @@
+# Made and tested with Python 3.12, numpy 2.4, scipy 1.18, Pillow 12.3.
+numpy
+scipy
+Pillow
+
+# The two neural tools (redrawing a spot, doubling the size) also need PyTorch:
+#   pip install torch
+# and the model files:
+#   python get_models.py
